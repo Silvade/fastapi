@@ -13,12 +13,12 @@ feedbacks = []
 def is_adult(age: int):
     return age >= 18
 
-#
-# @api.post("/user")
-# async def add_user_field(user_info: User):
-#     result = dict(user_info)
-#     result["is_adult"] = is_adult(user_info.age)
-#     return result
+
+@api.post("/user")
+async def add_user_field(user_info: User):
+    result = dict(user_info)
+    result["is_adult"] = is_adult(user_info.age)
+    return result
 
 
 @api.post("/feedback")
