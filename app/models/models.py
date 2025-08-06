@@ -10,13 +10,13 @@ class User(BaseModel):
 
 class Contact(BaseModel):
     email: EmailStr
-    phone: int = Field(min_length=7, max_length=15)
+    phone: int | None = Field(None, gt=999999, lt=1000000000000000)
 
 
 class Feedback(BaseModel):
+    contact: Contact
     name: str = Field(min_length=2, max_length=50)
     message: str = Field(min_length=10, max_length=500)
-    contact: Contact
 
     @field_validator("message")
     def check_message(cls, value):
