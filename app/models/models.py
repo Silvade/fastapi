@@ -8,6 +8,13 @@ class User(BaseModel):
     age: int
 
 
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    age: int | None = Field(None, gt=0)
+    is_subscribed: bool | None = None
+
+
 class Contact(BaseModel):
     email: EmailStr
     phone: int | None = Field(None, gt=999999, lt=1000000000000000)

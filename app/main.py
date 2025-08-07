@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from app.config import load_config
-from app.models.models import Feedback, User, FeedbackResponse
+from app.models.models import Feedback, User, FeedbackResponse, UserCreate
 
 api = FastAPI()
 # config = load_config()
@@ -19,6 +19,11 @@ async def add_user_field(user_info: User):
     result = dict(user_info)
     result["is_adult"] = is_adult(user_info.age)
     return result
+
+
+@api.post("/create_user", response_model=UserCreate)
+async def create_user(user_info: UserCreate):
+    return user_info
 
 
 @api.post("/feedback")
