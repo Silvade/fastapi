@@ -101,31 +101,40 @@ async def get_product_info(
     return list(filtered_products)[:limit]
 
 
-users_db = {"user123": {"password": "password123", "session_token": None}}
+users_db = {"user123": {"password": "password123"}}
+
+secret_key = "secret"
+token_serializer = itsdangerous.URLSafeTimedSerializer(secret_key)
+max_age = 120
 
 
 @api.post("/login")
 async def login(
+    response: Response,
     username: str = Form(...),
     password: str = Form(...),
-    response=Response(),
 ):
     if username in users_db and users_db[username]["password"] == password:
-        users_db[username]["session_token"] = str(uuid.uuid4())
+        id = str(uuid.uuid4())
+        users_db[username]["id"] = id
+        signature = token_serializer.dumps(id)
         response.set_cookie(
-            "session_token", users_db[username]["session_token"], httponly=True
+            key="session_token",
+            value=signature,
+            httponly=True,
+            max_age=max_age,
         )
         return {"message": "куки установлены"}
     return {"message": "неверный логин или пароль"}
 
 
-@api.get("/user")
-async def auth(session_token=Cookie()):
-    print(users_db)
-    tokens = {users_db[x]["session_token"]: x for x in users_db}
-    print(tokens)
-    print(tokens.keys())
-    print(session_token)
-    if session_token in tokens.keys():
-        return {"username": tokens[session_token]}
-    raise HTTPException(status_code=401, detail="Unauthorized")
+@api.get("/profile")
+async def get_profile(session_token=Cookie()):
+    try:
+        unserialized_id = token_serializer.loads(session_token, max_age=max_age)
+        user_ids = {users_db[x]["id"]: x for x in users_db}
+        if unserialized_id in user_ids:
+            return {"username": user_ids[unserialized_id]}
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    except itsdangerous.BadSignature:
+        return {"message": "Токен просрочен или неверный!"}
