@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import uuid
+import itsdangerous
+from fastapi import FastAPI, Form, Cookie, HTTPException
+from starlette.responses import Response
 
 from app.config import load_config
 from app.models.models import Feedback, User, FeedbackResponse, UserCreate
@@ -96,3 +99,33 @@ async def get_product_info(
             lambda x: x["category"] == category, filtered_products
         )
     return list(filtered_products)[:limit]
+
+
+users_db = {"user123": {"password": "password123", "session_token": None}}
+
+
+@api.post("/login")
+async def login(
+    username: str = Form(...),
+    password: str = Form(...),
+    response=Response(),
+):
+    if username in users_db and users_db[username]["password"] == password:
+        users_db[username]["session_token"] = str(uuid.uuid4())
+        response.set_cookie(
+            "session_token", users_db[username]["session_token"], httponly=True
+        )
+        return {"message": "куки установлены"}
+    return {"message": "неверный логин или пароль"}
+
+
+@api.get("/user")
+async def auth(session_token=Cookie()):
+    print(users_db)
+    tokens = {users_db[x]["session_token"]: x for x in users_db}
+    print(tokens)
+    print(tokens.keys())
+    print(session_token)
+    if session_token in tokens.keys():
+        return {"username": tokens[session_token]}
+    raise HTTPException(status_code=401, detail="Unauthorized")
