@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime
+
 import itsdangerous
-from fastapi import FastAPI, Form, Cookie, HTTPException
-from starlette.responses import Response
+from fastapi import FastAPI, Form, Cookie, HTTPException, status, Response
 
 from app.config import load_config
 from app.models.models import Feedback, User, FeedbackResponse, UserCreate
@@ -102,10 +103,21 @@ async def get_product_info(
 
 
 users_db = {"user123": {"password": "password123"}}
-
+user_ids_db = {}
 secret_key = "secret"
 token_serializer = itsdangerous.URLSafeTimedSerializer(secret_key)
-max_age = 120
+max_age = 360
+
+
+def update_cookie_time(response: Response, id):
+    signature = token_serializer.dumps(id)
+    response.set_cookie(
+        key="session_token",
+        value=signature,
+        httponly=True,
+        secure=False,
+        max_age=max_age,
+    )
 
 
 @api.post("/login")
@@ -116,25 +128,31 @@ async def login(
 ):
     if username in users_db and users_db[username]["password"] == password:
         id = str(uuid.uuid4())
-        users_db[username]["id"] = id
-        signature = token_serializer.dumps(id)
-        response.set_cookie(
-            key="session_token",
-            value=signature,
-            httponly=True,
-            max_age=max_age,
-        )
+        user_ids_db[id] = username
+        update_cookie_time(response, id)
         return {"message": "куки установлены"}
     return {"message": "неверный логин или пароль"}
 
 
 @api.get("/profile")
-async def get_profile(session_token=Cookie()):
+async def get_profile(response: Response, session_token=Cookie()):
     try:
-        unserialized_id = token_serializer.loads(session_token, max_age=max_age)
-        user_ids = {users_db[x]["id"]: x for x in users_db}
-        if unserialized_id in user_ids:
-            return {"username": user_ids[unserialized_id]}
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        unserialized_id, timestamp = token_serializer.loads(
+            session_token, max_age=max_age, return_timestamp=True
+        )
+        if unserialized_id in user_ids_db:
+            print(timestamp.timestamp())
+            past_time = datetime.now().timestamp() - timestamp.timestamp()
+            if past_time > 5 * 60:
+                raise HTTPException(
+                    status_code=401, detail={"message": "Session expired"}
+                )
+            elif past_time > 3 * 60:
+                update_cookie_time(response, unserialized_id)
+            return {"username": user_ids_db[unserialized_id]}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"message": "Invalid session"},
+        )
     except itsdangerous.BadSignature:
-        return {"message": "Токен просрочен или неверный!"}
+        raise HTTPException(status_code=401, detail={"message": "Invalid session"})
