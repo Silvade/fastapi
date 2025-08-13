@@ -1,12 +1,20 @@
 import re
 import uuid
 from datetime import datetime
+from typing import Annotated
 
 import itsdangerous
 from fastapi import FastAPI, Form, Cookie, HTTPException, status, Response, Header
 
 from app.config import load_config
-from app.models.models import Feedback, User, FeedbackResponse, UserCreate
+from app.models.models import (
+    Feedback,
+    User,
+    FeedbackResponse,
+    UserCreate,
+    CommonHeaders,
+    CommonHeaderValues,
+)
 
 api = FastAPI()
 # config = load_config()
@@ -159,33 +167,16 @@ async def get_profile(response: Response, session_token=Cookie()):
         raise HTTPException(status_code=401, detail={"message": "Invalid session"})
 
 
-@api.get("/headers")
-async def get_headers(
-    user_agent: str = Header(None), accept_language: str = Header(None)
+@api.get("/headers", response_model=CommonHeaders)
+async def get_headers(headers: Annotated[CommonHeaders, Header()]):
+    return headers
+
+
+@api.get("/info", response_model=CommonHeaderValues)
+async def get_header_info(
+    headers: Annotated[CommonHeaders, Header()], response: Response
 ):
-    if user_agent is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Header `user_agent` is empty",
-        )
-    if accept_language is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Header `accept_language` is empty",
-        )
-    languages = accept_language.split(",")
-    for language in languages:
-        separator = ";"
-        if separator in language:
-            left, right = map(str.strip, language.split(separator))
-        else:
-            left = language.strip()
-            right = None
-        if not re.fullmatch(r"\*|[a-z]{2}|[a-z]{2}-[A-Z]{2}", left) or (
-            right is not None and not re.fullmatch(r"q=\d.\d", right)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Header `accept_language` has incorrect format",
-            )
-    return {"User-Agent": user_agent, "Accept-Language": accept_language}
+    response.headers["X-Server-Time"] = datetime.now().isoformat()
+    return CommonHeaderValues(
+        headers=headers, message="Добро пожаловать! Ваши заголовки успешно обработаны."
+    )

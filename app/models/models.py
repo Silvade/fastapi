@@ -1,5 +1,6 @@
 import re
 
+from fastapi import Header, HTTPException, status
 from pydantic import BaseModel, Field, field_validator, EmailStr
 
 
@@ -33,4 +34,33 @@ class Feedback(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
+    message: str
+
+
+class CommonHeaders(BaseModel):
+    user_agent: str
+    accept_language: str
+
+    @field_validator("accept_language")
+    def check_accept_language_format(cls, value):
+        languages = value.split(",")
+        for language in languages:
+            separator = ";"
+            if separator in language:
+                left, right = map(str.strip, language.split(separator))
+            else:
+                left = language.strip()
+                right = None
+            if not re.fullmatch(r"\*|[a-z]{2}|[a-z]{2}-[A-Z]{2}", left) or (
+                right is not None and not re.fullmatch(r"q=\d.\d", right)
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Header `accept_language` has incorrect format",
+                )
+        return value
+
+
+class CommonHeaderValues(BaseModel):
+    headers: CommonHeaders
     message: str
