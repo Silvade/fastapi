@@ -1,4 +1,3 @@
-import re
 import uuid
 from datetime import datetime
 from typing import Annotated
@@ -13,7 +12,6 @@ from app.models.models import (
     FeedbackResponse,
     UserCreate,
     CommonHeaders,
-    CommonHeaderValues,
 )
 
 api = FastAPI()
@@ -167,16 +165,24 @@ async def get_profile(response: Response, session_token=Cookie()):
         raise HTTPException(status_code=401, detail={"message": "Invalid session"})
 
 
-@api.get("/headers", response_model=CommonHeaders)
+def get_header_values(headers: CommonHeaders):
+    return {
+        "User-Agent": headers.user_agent,
+        "Accept-Language": headers.accept_language,
+    }
+
+
+@api.get("/headers")
 async def get_headers(headers: Annotated[CommonHeaders, Header()]):
-    return headers
+    return get_header_values(headers)
 
 
-@api.get("/info", response_model=CommonHeaderValues)
+@api.get("/info")
 async def get_header_info(
     headers: Annotated[CommonHeaders, Header()], response: Response
 ):
     response.headers["X-Server-Time"] = datetime.now().isoformat()
-    return CommonHeaderValues(
-        headers=headers, message="Добро пожаловать! Ваши заголовки успешно обработаны."
-    )
+    return {
+        "message": "Добро пожаловать! Ваши заголовки успешно обработаны.",
+        "headers": get_header_values(headers),
+    }

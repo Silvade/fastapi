@@ -3,6 +3,8 @@ import re
 from fastapi import Header, HTTPException, status
 from pydantic import BaseModel, Field, field_validator, EmailStr
 
+MINIMUM_APP_VERSION = "1.5.5"
+
 
 class User(BaseModel):
     name: str
@@ -40,6 +42,7 @@ class FeedbackResponse(BaseModel):
 class CommonHeaders(BaseModel):
     user_agent: str
     accept_language: str
+    x_current_version: str = Field(pattern=r"^\d\.\d\.\d$")
 
     @field_validator("accept_language")
     def check_accept_language_format(cls, value):
@@ -60,7 +63,7 @@ class CommonHeaders(BaseModel):
                 )
         return value
 
-
-class CommonHeaderValues(BaseModel):
-    headers: CommonHeaders
-    message: str
+    @field_validator("x_current_version")
+    def check_x_current_version(cls, value):
+        if value < MINIMUM_APP_VERSION:
+            raise ValueError("Требуется обновить приложение")
