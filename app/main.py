@@ -15,8 +15,8 @@ from fastapi import (
     Depends,
 )
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-
-from app.config import load_config
+from fastapi.openapi.docs import get_swagger_ui_html
+from app.config import load_config, Mode
 from app.models.models import (
     Feedback,
     FeedbackResponse,
@@ -27,8 +27,8 @@ from app.models.models import (
 )
 
 api = FastAPI()
-# config = load_config()
-# api.debug = config.debug
+config = load_config()
+api.debug = config.debug
 
 feedbacks = []
 
@@ -184,10 +184,15 @@ async def get_header_info(
     }
 
 
-auth_api = FastAPI()
 security = HTTPBasic()
 crypt_context = CryptContext(schemes=["bcrypt"])
 fake_users_db: list[UserInDB] = []
+
+
+def raise_unauthorized_exception():
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"}
+    )
 
 
 def auth_user(credentials: HTTPBasicCredentials = Depends(security)):
@@ -197,9 +202,44 @@ def auth_user(credentials: HTTPBasicCredentials = Depends(security)):
                 return UserBase(username=credentials.username)
             else:
                 break
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"}
+    raise_unauthorized_exception()
+
+
+def auth_docs_user(credentials: HTTPBasicCredentials = Depends(security)):
+    print(credentials)
+    if secrets.compare_digest(
+        config.docs_user, credentials.username
+    ) and secrets.compare_digest(config.docs_password, credentials.password):
+        return UserBase(username=credentials.username)
+    raise_unauthorized_exception()
+
+
+def raise_404_on_prod():
+    if config.mode == Mode.PROD:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
+
+auth_api = FastAPI(docs_url=None, openapi_url=None, redoc_url=None)
+
+
+@auth_api.get(
+    "/docs",
+    include_in_schema=False,
+    dependencies=[Depends(raise_404_on_prod), Depends(auth_docs_user)],
+)
+async def docs():
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json", title="API Docs (Protected)"
     )
+
+
+@auth_api.get(
+    "/openapi.json",
+    include_in_schema=False,
+    dependencies=[Depends(raise_404_on_prod), Depends(auth_docs_user)],
+)
+async def openapi():
+    return auth_api.openapi()
 
 
 @auth_api.get("/login")
