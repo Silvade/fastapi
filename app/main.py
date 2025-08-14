@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Annotated
 
 import itsdangerous
-from fastapi import FastAPI, Form, Cookie, HTTPException, status, Response, Header
+from fastapi import FastAPI, Form, Cookie, HTTPException, status, Response, Header, Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.config import load_config
 from app.models.models import (
@@ -11,7 +12,7 @@ from app.models.models import (
     User,
     FeedbackResponse,
     UserCreate,
-    CommonHeaders,
+    CommonHeaders, UserAuth,
 )
 
 api = FastAPI()
@@ -109,7 +110,7 @@ async def get_product_info(
     return list(filtered_products)[:limit]
 
 
-users_db = {"user123": {"password": "password123"}}
+users_db = {"user123": "password123"}
 user_ids_db = {}
 secret_key = "secret"
 token_serializer = itsdangerous.URLSafeTimedSerializer(secret_key)
@@ -128,12 +129,12 @@ def update_cookie_time(response: Response, id):
 
 
 @api.post("/login")
-async def login(
+async def old_login(
     response: Response,
     username: str = Form(...),
     password: str = Form(...),
 ):
-    if username in users_db and users_db[username]["password"] == password:
+    if username in users_db and users_db[username] == password:
         id = str(uuid.uuid4())
         user_ids_db[id] = username
         update_cookie_time(response, id)
@@ -186,3 +187,16 @@ async def get_header_info(
         "message": "Добро пожаловать! Ваши заголовки успешно обработаны.",
         "headers": get_header_values(headers),
     }
+
+auth_api = FastAPI()
+security = HTTPBasic()
+
+def auth(credentials: HTTPBasicCredentials = Depends(security)):
+    if credentials.username in users_db and users_db[credentials.username] == credentials.password:
+        return UserAuth(login=credentials.username, password=credentials.password)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
+
+@auth_api.get('/login')
+def login(user: UserAuth = Depends(auth)):
+    return {"message": f"{user.login}, you got my secret, welcome."}

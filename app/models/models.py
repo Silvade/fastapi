@@ -67,3 +67,7 @@ class CommonHeaders(BaseModel):
     def check_x_current_version(cls, value):
         if value < MINIMUM_APP_VERSION:
             raise ValueError("Требуется обновить приложение")
+
+class UserAuth(BaseModel):
+    login: str
+    password: str
