@@ -1,18 +1,29 @@
+import secrets
 import uuid
 from datetime import datetime
 from typing import Annotated
-
+from passlib.context import CryptContext
 import itsdangerous
-from fastapi import FastAPI, Form, Cookie, HTTPException, status, Response, Header, Depends
+from fastapi import (
+    FastAPI,
+    Form,
+    Cookie,
+    HTTPException,
+    status,
+    Response,
+    Header,
+    Depends,
+)
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.config import load_config
 from app.models.models import (
     Feedback,
-    User,
     FeedbackResponse,
-    UserCreate,
-    CommonHeaders, UserAuth,
+    CommonHeaders,
+    UserBase,
+    User,
+    UserInDB,
 )
 
 api = FastAPI()
@@ -20,22 +31,6 @@ api = FastAPI()
 # api.debug = config.debug
 
 feedbacks = []
-
-
-def is_adult(age: int):
-    return age >= 18
-
-
-@api.post("/user")
-async def add_user_field(user_info: User):
-    result = dict(user_info)
-    result["is_adult"] = is_adult(user_info.age)
-    return result
-
-
-@api.post("/create_user", response_model=UserCreate)
-async def create_user(user_info: UserCreate):
-    return user_info
 
 
 @api.post("/feedback")
@@ -188,15 +183,33 @@ async def get_header_info(
         "headers": get_header_values(headers),
     }
 
+
 auth_api = FastAPI()
 security = HTTPBasic()
-
-def auth(credentials: HTTPBasicCredentials = Depends(security)):
-    if credentials.username in users_db and users_db[credentials.username] == credentials.password:
-        return UserAuth(login=credentials.username, password=credentials.password)
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+crypt_context = CryptContext(schemes=["bcrypt"])
+fake_users_db: list[UserInDB] = []
 
 
-@auth_api.get('/login')
-def login(user: UserAuth = Depends(auth)):
-    return {"message": f"{user.login}, you got my secret, welcome."}
+def auth_user(credentials: HTTPBasicCredentials = Depends(security)):
+    for user in fake_users_db:
+        if secrets.compare_digest(user.username, credentials.username):
+            if crypt_context.verify(credentials.password, user.hashed_password):
+                return UserBase(username=credentials.username)
+            else:
+                break
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"}
+    )
+
+
+@auth_api.get("/login")
+def login(user: UserBase = Depends(auth_user)):
+    return {"message": f"Welcome, {user.username}!"}
+
+
+@auth_api.post("/register")
+def register_user(user: User):
+    hashed_password = crypt_context.hash(user.password)
+    user_data = UserInDB(username=user.username, hashed_password=hashed_password)
+    fake_users_db.append(user_data)
+    return {"message": f"Пользователь {user.username} успешно зарегистрирован."}

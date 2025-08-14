@@ -1,14 +1,9 @@
 import re
 
-from fastapi import Header, HTTPException, status
+from fastapi import HTTPException, status
 from pydantic import BaseModel, Field, field_validator, EmailStr
 
 MINIMUM_APP_VERSION = "1.5.5"
-
-
-class User(BaseModel):
-    name: str
-    age: int
 
 
 class UserCreate(BaseModel):
@@ -68,6 +63,14 @@ class CommonHeaders(BaseModel):
         if value < MINIMUM_APP_VERSION:
             raise ValueError("Требуется обновить приложение")
 
-class UserAuth(BaseModel):
-    login: str
+
+class UserBase(BaseModel):
+    username: str
+
+
+class User(UserBase):
     password: str
+
+
+class UserInDB(UserBase):
+    hashed_password: str
